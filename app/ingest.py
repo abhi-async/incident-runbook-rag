@@ -4,17 +4,18 @@ embed with sentence-transformers, and persist to ChromaDB.
 """
 import os
 from pathlib import Path
+import shutil
 from dotenv import load_dotenv
 from langchain_community.document_loaders import DirectoryLoader, TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from app.local_embeddings import LocalEmbeddings
 
 load_dotenv()
 
-RUNBOOKS_DIR   = os.getenv("RUNBOOKS_DIR", "./runbooks")
-CHROMA_DIR     = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
-EMBED_MODEL    = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+RUNBOOKS_DIR   = os.getenv("RUNBOOKS_DIR")
+CHROMA_DIR     = os.getenv("CHROMA_PERSIST_DIR")
+EMBED_MODEL    = os.getenv("EMBEDDING_MODEL")
 
 
 def load_documents(path: str):
@@ -40,7 +41,7 @@ def chunk_documents(docs, chunk_size=500, chunk_overlap=50):
 
 
 def build_vectorstore(chunks):
-    embeddings = HuggingFaceEmbeddings(model_name=EMBED_MODEL)
+    embeddings = LocalEmbeddings(model_name=EMBED_MODEL)
     vectorstore = Chroma.from_documents(
         documents=chunks,
         embedding=embeddings,

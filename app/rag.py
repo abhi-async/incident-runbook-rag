@@ -4,36 +4,40 @@ rag.py – RAG chain: retrieve relevant runbook chunks + generate answer via LLM
 import os
 from dotenv import load_dotenv
 from langchain_community.vectorstores import Chroma
-from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_openai import ChatOpenAI
 from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
+from app.local_embeddings import LocalEmbeddings
 
 load_dotenv()
 
-CHROMA_DIR  = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
-EMBED_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
-LLM_MODEL   = os.getenv("LLM_MODEL", "gpt-3.5-turbo")
+CHROMA_DIR  = os.getenv("CHROMA_PERSIST_DIR")
+EMBED_MODEL = os.getenv("EMBEDDING_MODEL")
+LLM_MODEL   = os.getenv("LLM_MODEL")
 
-PROMPT_TEMPLATE = """
-You are an expert Site Reliability Engineer assistant.
-Use ONLY the context below (extracted from internal runbooks) to answer the question.
-If the answer is not in the context, say "I could not find this in the runbooks."
+PROMPT_TEMPLATE = """You are an expert Site Reliability Engineer assistant.
+Answer the question using only the context below, which is extracted from internal runbooks.
+Only if the context contains nothing relevant to the question, reply exactly: "I could not find this in the runbooks."
+Otherwise give a concise, step-by-step answer.
 
 Context:
 {context}
 
 Question: {question}
 
-Answer (be concise and step-by-step where applicable):
-"""
+Answer:"""
 
 
 def get_rag_chain():
-    embeddings   = HuggingFaceEmbeddings(model_name=EMBED_MODEL)
+    embeddings   = LocalEmbeddings(model_name=EMBED_MODEL)
     vectorstore  = Chroma(persist_directory=CHROMA_DIR, embedding_function=embeddings)
     retriever    = vectorstore.as_retriever(search_kwargs={"k": 4})
-    llm          = ChatOpenAI(model_name=LLM_MODEL, temperature=0)
+    llm          = ChatOpenAI(
+        model_name=LLM_MODEL,
+        base_url="http://localhost:4891/v1",
+        api_key="not-needed",
+        temperature=0.1,
+        max_tokens=2048)
     prompt       = PromptTemplate(
         input_variables=["context", "question"],
         template=PROMPT_TEMPLATE,
@@ -50,7 +54,7 @@ def get_rag_chain():
 
 def query_runbooks(question: str) -> dict:
     chain  = get_rag_chain()
-    result = chain({"query": question})
+    result = chain.invoke({"query": question})
     sources = list({doc.metadata.get("source", "unknown") for doc in result["source_documents"]})
     return {
         "answer":  result["result"],
